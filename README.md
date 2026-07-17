@@ -214,7 +214,7 @@ MIT License
 
 ## 👤 作者
 
-27届应届生 - AI应用开发方向
+exil-debug
 
 ---
 
