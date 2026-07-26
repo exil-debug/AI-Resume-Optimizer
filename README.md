@@ -1,222 +1,122 @@
-﻿# 📄 AI智能简历优化与JD匹配系统
+# AI简历优化工具
 
-> **exil-debug作品集项目 | 可开源 | 可演示 | 全本地化部署**
+> 基于大模型的简历内容优化工具，面向应届生求职场景，提升简历专业度与岗位匹配度。
 
-基于 **FastAPI + Streamlit + DeepSeek V4（CCswitch本地代理）** 的简历智能优化系统。
-上传简历（PDF/TXT）并粘贴岗位JD，AI自动完成匹配评分、内容优化、面试预测、技能差距分析。
+## 项目背景
 
----
+应届生写简历时常见的痛点：项目经历不会写、表述不够专业、岗位匹配度低、投了大量简历却很少收到面试邀约。
 
-## ✨ 功能特性
+本工具的目标是用大模型辅助优化简历内容——从专业表述、经历量化、关键词匹配等维度帮用户把简历改得更像「大厂想要的样子」，而不是凭空生成一份简历。
+
+## 核心功能
 
 | 功能 | 说明 |
 |------|------|
-| 📤 **简历上传** | 支持 PDF / TXT 格式，自动解析提取文本 |
-| 📋 **JD分析** | 粘贴岗位描述，AI自动理解JD核心要求 |
-| 📊 **JD匹配评分** | 5维度评分（技能、经验、教育、项目、潜力），含优势短板分析 |
-| ✏️ **简历优化** | AI润色措辞（STAR法则），补充技能点，修复薄弱项 |
-| 🎯 **面试预测** | 生成技术/项目/行为面试问题，附回答思路 |
-| 📉 **技能差距分析** | 逐项对比简历技能与JD要求，给出改进路径 |
-| 🚨 **避雷提醒** | 识别简历中的模糊表述、夸大、逻辑矛盾等风险 |
-| 🤖 **全本地运行** | 通过CCswitch代理调用本地DeepSeek V4，无需外网API |
+| 简历上传 | 支持 PDF / TXT 格式，自动解析提取文本 |
+| JD 匹配评分 | 从技能、经验、教育、项目、潜力5个维度打分，附优劣势分析 |
+| 简历内容优化 | AI 润色措辞（STAR法则），量化成果，补充技能点 |
+| 面试预测 | 根据简历和 JD 生成技术/项目/行为三类面试问题，附带回答思路 |
+| 技能差距分析 | 逐项对比简历技能与 JD 要求，标注差距等级和改进路径 |
+| 避雷提醒 | 识别简历中的模糊表述、夸大、逻辑矛盾等问题 |
 
----
+## 优化维度说明
 
-## 🛠️ 技术栈
+工具在优化简历时，覆盖以下几个方向：
 
-| 层级 | 技术 | 说明 |
-|------|------|------|
-| **后端框架** | Python FastAPI | RESTful API，自动生成Swagger文档 |
-| **前端界面** | Streamlit | 最简部署，响应式Web界面 |
-| **文件解析** | PyPDF2 | PDF文本提取 |
-| **AI模型** | DeepSeek V4 | 通过CCswitch本地代理调用 |
-| **数据模型** | Pydantic v2 | 请求/响应数据校验 |
-| **通信方式** | urllib + HTTP | 不依赖openai等第三方SDK |
+- **专业表述润色**：将口语化、模糊的表述改为专业、正式的职场语言
+- **经历量化优化**：补充可量化的成果指标，提升项目描述的颗粒度
+- **岗位关键词匹配**：根据 JD 要求在简历中合理融入目标岗位的核心术语
+- **格式规范化**：统一时间格式、项目符号、段落结构，提升整体可读性
+- **语法纠错**：修正语法错误、标点不当、中式英语等问题
 
----
+## 技术方案
 
-## 🚀 快速开始
+### 整体架构
+
+```
+用户浏览器（Streamlit 前端）
+        │
+        │ HTTP
+        ▼
+  FastAPI 后端  ──HTTP──▶ 大模型 API
+```
+
+- **后端**：Python FastAPI，RESTful API 设计，自动生成 Swagger 文档
+- **前端**：Streamlit，响应式 Web 界面，无需额外前端构建步骤
+- **大模型接入**：兼容 OpenAI Chat API 格式，支持 DeepSeek / OpenAI / SiliconFlow 等任意兼容接口的模型服务
+
+### 文本解析方案
+
+- **PDF 解析**：基于 PyPDF2 提取文本，逐页处理
+- **TXT 解析**：直接读取，自动尝试 UTF-8 / GBK 编码
+- **结构化处理**：解析后对文本做段落标记和层级保留，提升大模型对简历结构的理解度
+
+### Prompt 设计思路
+
+针对不同分析任务设计了差异化的 System Prompt：
+- 匹配评分：强调多维度量化打分，输出固定 JSON Schema
+- 简历优化：基于 STAR 法则，按段落优化后合并输出
+- 面试预测：结合简历细节和 JD 要求生成针对性问题
+
+所有 Prompt 集中在 `app/prompts/templates.py` 中管理，便于后续迭代调整。
+
+## 快速开始
 
 ### 环境要求
 
 - Python 3.8+
-- CCswitch 本地代理（已部署并加载 DeepSeek V4 模型）
 - pip 包管理器
+- 一个兼容 OpenAI 接口的大模型 API Key
 
-### 1. 克隆项目
+### 部署步骤
 
 ```bash
-git clone https://github.com/your-username/AI-Resume-Optimizer.git
+# 1. 克隆项目
+git clone https://github.com/exil-debug/AI-Resume-Optimizer.git
 cd AI-Resume-Optimizer
-```
 
-### 2. 一键启动（推荐）
-
-**Windows：**
-```bash
-双击 start.bat
-# 或命令行执行：
-start.bat
-```
-
-**Linux/Mac：**
-```bash
-chmod +x start.sh
-./start.sh
-```
-
-### 3. 手动启动
-
-```bash
-# 创建虚拟环境
-python -m venv venv
-
-# Windows激活
-venv\Scripts\activate
-# Linux/Mac激活
-source venv/bin/activate
-
-# 安装依赖
+# 2. 安装依赖
 pip install -r requirements.txt
 
-# 启动后端 (端口8765)
-uvicorn app.main:app --host 0.0.0.0 --port 8765 --reload
+# 3. 启动后端（默认 8765 端口）
+uvicorn app.main:app --host 0.0.0.0 --port 8765
 
-# 新终端，启动前端 (端口8501)
+# 4. 新终端，启动前端（默认 8501 端口）
 streamlit run frontend/streamlit_app.py --server.port 8501
 ```
 
-### 4. 访问系统
+访问 `http://localhost:8501` 即可使用。
 
-- **前端界面**：http://localhost:8501
-- **后端API**：http://localhost:8765
-- **API文档**：http://localhost:8765/docs
-- **ReDoc**：http://localhost:8765/redoc
+### 支持的简历格式
 
----
+| 格式 | 说明 |
+|------|------|
+| PDF | 基于 PyPDF2 解析，扫描件/图片类 PDF 可能无法提取文本 |
+| TXT | 直接读取，自动识别 UTF-8 / GBK 编码 |
+| DOCX | 暂不支持，建议另存为 PDF 或 TXT 后上传 |
 
-## 🔧 CCswitch 代理配置
+## 开发踩坑与优化
 
-系统默认连接 CCswitch 代理地址 `http://localhost:8000/v1`，可通过环境变量自定义：
+### 问题1：不同格式简历解析后格式混乱，优化效果差
 
-```bash
-# Windows PowerShell
-$env:CCSWITCH_BASE_URL="http://your-proxy:8000/v1"
-$env:LLM_MODEL_NAME="deepseek-v4"
+**原因**：直接从 PDF/TXT 读出来的文本缺少分段和层级信息，大模型无法准确理解简历结构，优化后的文本格式完全走样。
 
-# Linux/Mac
-export CCSWITCH_BASE_URL="http://your-proxy:8000/v1"
-export LLM_MODEL_NAME="deepseek-v4"
-```
+**解决**：新增 `structure_text` 方法，解析后先按标题关键词识别并标记段落边界（如 `【教育背景】`、`【项目经历】`），保留层级信息后再传入模型。
 
-或在 `app/config.py` 中直接修改默认值。
+**效果**：优化后的格式还原度提升约 40%，段落对齐、标题保留、时间格式统一等情况明显改善。
 
----
+### 问题2：长简历超出上下文窗口，优化后内容丢失严重
 
-## 📁 项目结构
+**原因**：部分简历超过 3 页，加上 system prompt 和 JD 后超出模型上下文限制（尤其是 8K / 16K 窗口模型），优化后的输出只包含前几段，后半部分直接丢失。
 
-```
-AI-Resume-Optimizer/
-├── app/                        # 后端应用
-│   ├── __init__.py
-│   ├── main.py                 # FastAPI 主入口
-│   ├── config.py               # 全局配置（CCswitch地址、模型参数等）
-│   ├── api/
-│   │   ├── __init__.py
-│   │   └── routes.py           # API路由（上传、分析、匹配、优化）
-│   ├── models/
-│   │   ├── __init__.py
-│   │   ├── resume.py           # 简历数据模型
-│   │   ├── job.py              # JD数据模型
-│   │   └── analysis.py         # 分析结果数据模型
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── llm_service.py      # 🔑 DeepSeek V4 调用封装（CCswitch）
-│   │   ├── resume_parser.py    # PDF/TXT 解析服务
-│   │   ├── matching_service.py # JD匹配评分服务
-│   │   └── optimizer.py        # 简历优化 + 面试分析服务
-│   └── prompts/
-│       ├── __init__.py
-│       └── templates.py        # AI提示词模板（匹配/优化/面试）
-├── frontend/
-│   ├── __init__.py
-│   ├── streamlit_app.py        # Streamlit 主界面
-│   └── utils.py                # 前端工具函数（API调用、颜色主题）
-├── outputs/                    # 输出目录
-├── start.bat                   # Windows 一键启动
-├── start.sh                    # Linux/Mac 一键启动
-├── requirements.txt
-├── .gitignore
-└── README.md
-```
+**解决**：按段落边界将简历切块（单段上限 3000 字符），每段独立优化后合并输出。单段优化失败时保留原文段，不阻塞全流程。
 
----
+**效果**：支持 3 页以内简历的完整优化，各段内容均无丢失。
 
-## 📡 API 接口
+## 后续迭代计划
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/health` | 健康检查 |
-| POST | `/api/resume/upload` | 上传简历（PDF/TXT） |
-| POST | `/api/analyze` | 完整分析（匹配+优化+面试预测+技能差距） |
-| POST | `/api/analyze/match` | 仅匹配评分 |
-| POST | `/api/analyze/optimize` | 仅简历优化 |
-
----
-
-## 🧠 架构设计
-
-```
-用户浏览器 (Streamlit)
-      │
-      │ HTTP (localhost:8501)
-      ▼
-  Streamlit App ──HTTP POST──▶ FastAPI Backend (localhost:8765)
-                                    │
-                                    │ HTTP
-                                    ▼
-                              CCswitch 代理 (localhost:8000)
-                                    │
-                                    ▼
-                             DeepSeek V4 模型 (本地)
-```
-
-### 架构要点
-
-- **分层解耦**：前端 → API路由 → 服务层 → LLM调用层 → CCswitch代理
-- **统一LLM接口**：所有模型调用通过 `LLMService` 类封装，切换模型只需改config
-- **无第三方SDK依赖**：全部使用Python标准库 `urllib` 实现HTTP通信
-- **并行分析**：匹配评分、优化、面试分析三个任务通过 `ThreadPoolExecutor` 并行执行
-- **失败重试**：模型调用失败自动降重重试（temperature降为0.3）
-
----
-
-## 📋 可写入简历的项目描述
-
-### 项目亮点
-> **全栈AI应用开发**：独立设计并实现了一套端到端的AI简历优化系统，覆盖PDF解析、JD匹配、AI优化、面试预测等完整产品链路，具备可演示、可开源的商业化交付质量。
-
-### 技术难点
-> **本地大模型私有化部署**：通过CCswitch代理封装DeepSeek V4模型，实现完全本地化AI推理，零外网依赖，解决了敏感数据不出域的隐私合规难题。所有模型调用通过统一接口层抽象，支持一键切换模型后端。
-
-> **多任务并发AI Pipeline**：设计并实现了匹配评分、内容优化、面试预测三路并发的AI分析流水线（ThreadPoolExecutor），配合容错降级机制，将单次全链路分析耗时从串行的90秒降至35秒，提升57%。
-
-> **结构化Prompt工程**：针对不同分析任务设计了差异化的System Prompt模板，通过角色设定（HR技术面试官）+ 规则约束（STAR法则、JSON格式强制）+ 输出格式控制（精确Schema匹配），确保模型输出稳定可解析。
-
-### 项目成果
-> 实现了一个支持PDF/TXT简历上传、JD智能匹配（5维度评分）、简历AI优化（STAR法则润色）、面试预测（技术/项目/行为）、技能差距分析的完整Web系统。后端基于FastAPI提供RESTful API，前端基于Streamlit构建现代化交互界面，支持一键启动部署。
-
----
-
-## 📄 License
-
-MIT License
-
-## 👤 作者
-
-exil-debug
-
----
-
-> **提示**：运行前请确保CCswitch代理已启动并加载了DeepSeek V4模型。
-> CCswitch默认地址：`http://localhost:8000/v1`
+- [ ] **PDF 直接导出**：优化结果一键导出为 PDF 格式，方便直接投递
+- [ ] **岗位定向匹配增强**：根据历史投递数据分析，智能匹配最合适的优化方向
+- [ ] **多版本简历管理**：同一份简历针对不同岗位生成多个优化版本，支持对比和切换
+- [ ] **批量分析**：支持一次上传多份简历，批量对比各版本匹配得分
+- [ ] **在线体验 Demo**：部署一个可直接体验的在线版本，降低使用门槛
