@@ -1,9 +1,9 @@
-﻿"""
+"""
 简历解析服务
 
 支持PDF和TXT格式简历的解析与文本提取。
 PDF解析基于PyPDF2，TXT直接读取。
-提供简历结构化信息提取接口。
+新增结构化提取功能，保留简历层级与分段信息后再传入模型。
 """
 
 import re
@@ -35,10 +35,6 @@ class ResumeParser:
 
         Returns:
             提取出的纯文本内容
-
-        Raises:
-            FileNotFoundError: 文件不存在
-            ValueError: 文件格式不支持
         """
         import PyPDF2
 
@@ -51,9 +47,11 @@ class ResumeParser:
         text_parts = []
         with open(file_path, "rb") as f:
             reader = PyPDF2.PdfReader(f)
+            if len(reader.pages) == 0:
+                raise ValueError("PDF文件为空，无法解析")
             for page_num, page in enumerate(reader.pages, 1):
                 page_text = page.extract_text()
-                if page_text.strip():
+                if page_text and page_text.strip():
                     text_parts.append(f"[第{page_num}页]\n{page_text.strip()}")
 
         return "\n\n".join(text_parts) if text_parts else ""
@@ -121,6 +119,39 @@ class ResumeParser:
         return text.strip()
 
     @staticmethod
+    def structure_text(raw_text: str) -> str:
+        """
+        将简历文本按段落/标题拆分为结构化格式。
+
+        保留层级关系，添加小节标签，便于大模型理解简历结构。
+        对后续优化环节的格式还原度有明显提升。
+
+        Returns:
+            带结构化标记的文本
+        """
+        text = ResumeParser.clean_text(raw_text)
+        lines = text.split("\n")
+        structured = []
+        section_labels = ["教育背景", "教育经历", "工作经历", "实习经历",
+                          "项目经历", "项目经验", "技能", "专业技能",
+                          "个人简介", "自我评价", "自我介绍", "证书",
+                          "获奖", "荣誉", "语言", "兴趣爱好"]
+
+        for line in lines:
+            line_stripped = line.strip()
+            if not line_stripped:
+                structured.append("")
+                continue
+            # 识别可能的小标题行并添加标记
+            matched = any(s in line_stripped for s in section_labels)
+            if matched and (len(line_stripped) < 30 or line_stripped.endswith("：") or line_stripped.endswith(":")):
+                structured.append(f"【{line_stripped}】")
+            else:
+                structured.append(f"  {line_stripped}")
+
+        return "\n".join(structured)
+
+    @staticmethod
     def validate_resume_text(text: str) -> tuple[bool, str]:
         """
         验证简历文本是否有效。
@@ -131,8 +162,10 @@ class ResumeParser:
         Returns:
             (是否有效, 提示消息)
         """
-        if not text or len(text.strip()) < 20:
-            return False, "简历内容过短，请确认上传了完整的简历文件。"
+        if not text or not text.strip():
+            return False, "简历内容为空，请确认上传了正确的简历文件。"
+        if len(text.strip()) < 20:
+            return False, "简历内容过短（不足20字符），请确认上传了完整的简历文件。"
         if len(text) > 15000:
             return False, "简历内容过长（超过15000字符），请精简后重试。"
         return True, ""

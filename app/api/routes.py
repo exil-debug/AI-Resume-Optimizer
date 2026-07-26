@@ -1,4 +1,4 @@
-﻿"""
+"""
 FastAPI API路由
 
 提供简历上传、JD分析、匹配评分、优化、综合分析等RESTful API。
@@ -75,17 +75,8 @@ async def full_analysis(request: AnalysisRequest):
     """
     完整综合分析（匹配评分 + 简历优化 + 面试预测 + 技能差距 + 避雷点）
 
-    请求体中需包含 resume_text, jd_text, api_config:
-    {
-        "resume_text": "...",
-        "jd_text": "...",
-        "api_config": {
-            "provider": "deepseek",
-            "api_key": "sk-xxx",
-            "base_url": "https://api.deepseek.com/v1",
-            "model": "deepseek-chat"
-        }
-    }
+    请求体中需包含 resume_text, jd_text, api_config.
+    自动对简历文本进行结构化处理后再分析，提升优化效果。
     """
     resume_text = request.resume_text.strip()
     jd_text = request.jd_text.strip()
@@ -102,11 +93,14 @@ async def full_analysis(request: AnalysisRequest):
     if len(jd_text) < 20:
         raise HTTPException(status_code=400, detail="JD文本过短")
 
+    # 对简历文本做结构化标记，保留层级与分段信息后再传入模型
+    structured_resume = resume_parser.structure_text(resume_text)
+
     try:
         with ThreadPoolExecutor(max_workers=3) as pool:
-            f1 = pool.submit(matching_service.analyze, resume_text, jd_text, api_config)
-            f2 = pool.submit(optimization_service.optimize, resume_text, jd_text, api_config)
-            f3 = pool.submit(interview_analysis_service.analyze, resume_text, jd_text, api_config)
+            f1 = pool.submit(matching_service.analyze, structured_resume, jd_text, api_config)
+            f2 = pool.submit(optimization_service.optimize, structured_resume, jd_text, api_config)
+            f3 = pool.submit(interview_analysis_service.analyze, structured_resume, jd_text, api_config)
 
             match_result = f1.result()
             optimize_result = f2.result()
@@ -122,7 +116,6 @@ async def full_analysis(request: AnalysisRequest):
         return AnalysisResponse(status="success", data=comprehensive)
 
     except ValueError as e:
-        # API Key无效、余额不足等用户可处理的问题
         return AnalysisResponse(status="error", error=str(e))
     except ConnectionError as e:
         return AnalysisResponse(status="error", error=str(e))

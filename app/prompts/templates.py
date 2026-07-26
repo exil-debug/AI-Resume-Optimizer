@@ -1,9 +1,12 @@
-﻿"""
+"""
 Prompt模板管理
 
-集中管理所有用于DeepSeek V4的提示词模板。
+集中管理所有用于大模型的提示词模板。
 每个分析功能对应一个system prompt和一个user prompt模板。
+新增多维度优化配置和分段优化模板，支持长简历按模块处理。
 """
+
+from app.config import ENABLE_POLISH, ENABLE_QUANTIFY, ENABLE_KEYWORD_MATCH, ENABLE_FORMAT_NORMALIZE, ENABLE_GRAMMAR_FIX, OUTPUT_STYLE
 
 
 # ============================================================
@@ -50,18 +53,40 @@ MATCHING_SYSTEM_PROMPT = f"""{BASE_SYSTEM_PROMPT}
 
 
 # ============================================================
-# 2. 简历优化 Prompt
+# 2. 简历优化 Prompt（多维度配置）
+# TODO: 后续可根据用户反馈调整各维度的优化强度
 # ============================================================
+
+# 根据配置开关生成优化要求
+_optimization_rules = []
+if ENABLE_POLISH:
+    _optimization_rules.append("- 措辞润色：统一使用STAR法则（情境-任务-行动-结果），用数据量化成果")
+if ENABLE_QUANTIFY:
+    _optimization_rules.append("- 经历量化：为每条经历补充可量化的成果指标，如提升百分比、覆盖用户数等")
+if ENABLE_KEYWORD_MATCH:
+    _optimization_rules.append("- 关键词匹配：根据JD要求，在简历中合理融入岗位核心关键词和术语")
+if ENABLE_FORMAT_NORMALIZE:
+    _optimization_rules.append("- 格式规范化：统一段落结构、时间格式、项目符号，提升可读性")
+if ENABLE_GRAMMAR_FIX:
+    _optimization_rules.append("- 语法纠错：修正语法错误、标点不当、中式英语表达")
+
+# 根据输出风格生成风格要求
+_style_map = {
+    "简洁": "输出风格简洁精炼，每条优化直接给出修改结果，不做过多解释。",
+    "正式": "输出风格正式规范，每条优化附带简要的修改原因说明。",
+    "详细": "输出风格详细全面，每条优化附带原表述、优化后表述和详细的修改理由。",
+}
+_style_requirement = _style_map.get(OUTPUT_STYLE, _style_map["正式"])
 
 OPTIMIZATION_SYSTEM_PROMPT = f"""{BASE_SYSTEM_PROMPT}
 
 ## 优化规则
 你将收到一份【简历文本】和对应的【岗位JD】。
 请对简历进行以下优化：
-1. 措辞润色：统一使用STAR法则（情境-任务-行动-结果），用数据量化成果
-2. 技能补充：根据JD要求补充简历中提及但描述不足的技能点
-3. 薄弱点修复：针对JD要求但与简历差距大的部分给出改写建议
-4. 整体结构：优化段落结构和表达逻辑，使其更符合HR阅读习惯
+{chr(10).join(_optimization_rules)}
+
+## 风格要求
+{_style_requirement}
 
 ## 输出格式要求
 请严格按照以下JSON格式输出，不要包含其他内容：
@@ -171,3 +196,40 @@ def build_interview_user_prompt(resume_text: str, jd_text: str) -> str:
 ```
 
 请严格按照JSON格式输出分析结果。"""
+
+
+# ============================================================
+# 5. 分段优化模板（用于长简历分段处理）
+# ============================================================
+
+CHUNK_OPTIMIZATION_SYSTEM_PROMPT = f"""{BASE_SYSTEM_PROMPT}
+
+## 分段优化规则
+你正在对一个较长简历的一个模块片段进行优化。
+请根据阶段说明："这是简历的第N段，包含内容模块名称"
+保持简历原有分段结构，聚焦本段内容进行优化，不要重复其他段的内容。
+
+## 输出格式
+请严格按照JSON格式输出优化后的本段文本，不要合并或跳过内容。
+
+## 注意事项
+- 保持本段原始结构不变
+- 不要新增其他段的内容
+- 优化后文本以"段落X:"开头"""
+
+
+def build_chunk_optimization_user_prompt(chunk_text: str, jd_text: str, chunk_index: int, section_name: str) -> str:
+    """构建分段优化的用户提示词"""
+    return f"""这是简历的第{chunk_index + 1}段，内容模块：{section_name}
+
+## 本段内容
+```
+{chunk_text}
+```
+
+## 岗位JD（参考）
+```
+{jd_text[:2000]}
+```
+
+请对本段简历内容进行优化，输出JSON格式结果。"""
