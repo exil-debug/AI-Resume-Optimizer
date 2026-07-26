@@ -3,7 +3,7 @@ Prompt模板管理
 
 集中管理所有用于大模型的提示词模板。
 每个分析功能对应一个system prompt和一个user prompt模板。
-新增多维度优化配置和分段优化模板，支持长简历按模块处理。
+用户提示词构造时包含截断保护，防止长文本超出模型上下文限制。
 """
 
 from app.config import ENABLE_POLISH, ENABLE_QUANTIFY, ENABLE_KEYWORD_MATCH, ENABLE_FORMAT_NORMALIZE, ENABLE_GRAMMAR_FIX, OUTPUT_STYLE
@@ -57,7 +57,6 @@ MATCHING_SYSTEM_PROMPT = f"""{BASE_SYSTEM_PROMPT}
 # TODO: 后续可根据用户反馈调整各维度的优化强度
 # ============================================================
 
-# 根据配置开关生成优化要求
 _optimization_rules = []
 if ENABLE_POLISH:
     _optimization_rules.append("- 措辞润色：统一使用STAR法则（情境-任务-行动-结果），用数据量化成果")
@@ -70,7 +69,6 @@ if ENABLE_FORMAT_NORMALIZE:
 if ENABLE_GRAMMAR_FIX:
     _optimization_rules.append("- 语法纠错：修正语法错误、标点不当、中式英语表达")
 
-# 根据输出风格生成风格要求
 _style_map = {
     "简洁": "输出风格简洁精炼，每条优化直接给出修改结果，不做过多解释。",
     "正式": "输出风格正式规范，每条优化附带简要的修改原因说明。",
@@ -112,21 +110,13 @@ INTERVIEW_ANALYSIS_SYSTEM_PROMPT = f"""{BASE_SYSTEM_PROMPT}
 请同时进行以下三方面分析：
 
 ### 3.1 简历避雷点
-指出简历中可能导致面试官质疑的问题，如：
-- 表述模糊、夸大不实
-- 技术栈与描述不一致
-- 项目描述缺乏技术深度
-- 经历空白期或逻辑矛盾
+指出简历中可能导致面试官质疑的问题
 
 ### 3.2 面试预测问题
-根据简历和JD，预测面试中可能被问到的问题：
-- 技术深度问题（针对简历中的技术栈）
-- 项目细节问题（针对项目难点）
-- 行为面试问题（团队协作、冲突处理等）
-- 岗位匹配问题（为什么适合这个岗位）
+根据简历和JD，预测面试中可能被问到的问题
 
 ### 3.3 岗位技能差距分析
-对比简历技能与JD要求，分析差距和改进路径。
+对比简历技能与JD要求，分析差距和改进路径
 
 ## 输出格式要求
 请严格按照以下JSON格式输出，不要包含其他内容：
@@ -144,11 +134,32 @@ INTERVIEW_ANALYSIS_SYSTEM_PROMPT = f"""{BASE_SYSTEM_PROMPT}
 
 
 # ============================================================
-# 4. 用户提示词模板
+# 4. 用户提示词模板（含截断保护）
 # ============================================================
+
+# 单次传入的最大字符数，超过此值会被截断
+_MAX_PROMPT_LENGTH = 12000
+
+
+def _truncate_text(text: str, max_len: int = _MAX_PROMPT_LENGTH) -> str:
+    """截断过长的文本，保留完整段落边界。"""
+    if len(text) <= max_len:
+        return text
+    truncated = text[:max_len]
+    last_break = truncated.rfind("\n\n")
+    if last_break > max_len * 0.7:
+        truncated = truncated[:last_break]
+    else:
+        last_break = truncated.rfind("\n")
+        if last_break > max_len * 0.7:
+            truncated = truncated[:last_break]
+    return truncated + "\n\n[内容过长，已截断至前{max_len}字符]"
+
 
 def build_matching_user_prompt(resume_text: str, jd_text: str) -> str:
     """构建JD匹配评分的用户提示词"""
+    resume_text = _truncate_text(resume_text)
+    jd_text = _truncate_text(jd_text, 6000)
     return f"""请对以下简历和岗位JD进行匹配评分分析。
 
 ## 简历文本
@@ -166,6 +177,8 @@ def build_matching_user_prompt(resume_text: str, jd_text: str) -> str:
 
 def build_optimization_user_prompt(resume_text: str, jd_text: str) -> str:
     """构建简历优化的用户提示词"""
+    resume_text = _truncate_text(resume_text)
+    jd_text = _truncate_text(jd_text, 6000)
     return f"""请根据岗位JD对简历进行优化润色。
 
 ## 简历文本
@@ -183,6 +196,8 @@ def build_optimization_user_prompt(resume_text: str, jd_text: str) -> str:
 
 def build_interview_user_prompt(resume_text: str, jd_text: str) -> str:
     """构建面试预测+技能差距+避雷点的用户提示词"""
+    resume_text = _truncate_text(resume_text)
+    jd_text = _truncate_text(jd_text, 6000)
     return f"""请对以下简历和岗位JD进行综合分析：简历避雷点、面试预测问题、技能差距。
 
 ## 简历文本
@@ -210,16 +225,17 @@ CHUNK_OPTIMIZATION_SYSTEM_PROMPT = f"""{BASE_SYSTEM_PROMPT}
 保持简历原有分段结构，聚焦本段内容进行优化，不要重复其他段的内容。
 
 ## 输出格式
-请严格按照JSON格式输出优化后的本段文本，不要合并或跳过内容。
+请严格按照JSON格式输出优化后的本段文本。
 
 ## 注意事项
 - 保持本段原始结构不变
 - 不要新增其他段的内容
-- 优化后文本以"段落X:"开头"""
+- 如果本段内容很少，可适当补充但不要编造"""
 
 
 def build_chunk_optimization_user_prompt(chunk_text: str, jd_text: str, chunk_index: int, section_name: str) -> str:
-    """构建分段优化的用户提示词"""
+    """构建分段优化的用户提示词，JD参考截断至2000字符"""
+    jd_truncated = _truncate_text(jd_text, 2000)
     return f"""这是简历的第{chunk_index + 1}段，内容模块：{section_name}
 
 ## 本段内容
@@ -229,7 +245,7 @@ def build_chunk_optimization_user_prompt(chunk_text: str, jd_text: str, chunk_in
 
 ## 岗位JD（参考）
 ```
-{jd_text[:2000]}
+{jd_truncated}
 ```
 
 请对本段简历内容进行优化，输出JSON格式结果。"""
