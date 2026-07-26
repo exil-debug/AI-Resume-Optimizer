@@ -1,11 +1,14 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
+*.pyo
 *.egg-info/
 dist/
 build/
 *.egg
 .eggs/
+*.whl
+*.egg-info/
 
 # 虚拟环境
 venv/
@@ -34,3 +37,11 @@ Thumbs.db
 
 # 临时文件
 _temp/
+*.tmp
+*.bak
+*.swp
+*~
+
+# 测试缓存
+.pytest_cache/
+.mypy_cache/
